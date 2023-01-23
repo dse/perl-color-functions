@@ -3,7 +3,26 @@ use warnings;
 use strict;
 use List::Util qw(min max);
 
-our $GAMMA = 2.4;
+our $GAMMA_2020    = 2.2;
+our $ALPHA_2020    = 1.099;           # 1.099296826809442
+our $A_2020        = $ALPHA_2020 - 1; # 0.099
+our $BETA_2020     = 0.018;           # 0.018053968510807
+our $THINGY_2020   = 4.5;
+our $THINGY_2_2020 = $THINGY_2020 * $BETA_2020; # 0.081...
+
+our $GAMMA_709     = 2.2;
+our $ALPHA_709     = 1.099;
+our $A_709         = $ALPHA_709 - 1; # 0.099
+our $BETA_709      = 0.018;
+our $THINGY_709    = 4.5;
+our $THINGY_2_709  = $THINGY_709 * $BETA_709; # 0.081
+
+our $GAMMA_SRGB    = 2.4;
+our $ALPHA_SRGB    = 1.055;
+our $A_SRGB        = $ALPHA_SRGB - 1; # 0.055
+our $BETA_SRGB     = 0.0031308;
+our $THINGY_SRGB   = 12.92;                     # orig 12.9232102
+our $THINGY_2_SRGB = $THINGY_SRGB * $BETA_SRGB; # 0.04045 orig 0.0392857
 
 sub clamp {
     my ($x, $min, $max) = @_;
@@ -22,7 +41,7 @@ sub srgb_to_linear {
     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
     my ($r, $g, $b) = map { clamp($_) } @_;
     ($r, $g, $b) = map {
-        ($_ <= 0.04045) ? ($_ / 12.92) : ((($_ + 0.055) ** 2.4) / 1.055)
+        ($_ <= $THINGY_2_SRGB) ? ($_ / $THINGY_SRGB) : ((($_ + $A_SRGB) ** $GAMMA_SRGB) / $ALPHA_SRGB)
     } ($r, $g, $b);
     return ($r, $g, $b) if wantarray;
     return [$r, $g, $b];
@@ -32,7 +51,7 @@ sub linear_to_srgb {
     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
     my ($r, $g, $b) = map { clamp($_) } @_;
     ($r, $g, $b) = map {
-        ($_ <= 0.0031308) ? (12.92 * $_) : (1.055 * ($_ ** (1 / 2.4)) - 0.055)
+        ($_ <= $BETA_SRGB) ? ($THINGY_SRGB * $_) : ($ALPHA_SRGB * ($_ ** (1 / $GAMMA_SRGB)) - $A_SRGB)
     } ($r, $g, $b);
     return ($r, $g, $b) if wantarray;
     return [$r, $g, $b];
