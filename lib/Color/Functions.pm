@@ -22,7 +22,7 @@ our $ALPHA_SRGB    = 1.055;
 our $A_SRGB        = $ALPHA_SRGB - 1; # 0.055
 our $BETA_SRGB     = 0.0031308;
 our $THINGY_SRGB   = 12.92;                     # orig 12.9232102
-our $THINGY_2_SRGB = $THINGY_SRGB * $BETA_SRGB; # 0.04045 orig 0.0392857
+our $THINGY_2_SRGB = $THINGY_SRGB * $BETA_SRGB; # 0.04045 orig 0.0392857 from obsolete early draft
 
 sub clamp {
     my ($x, $min, $max) = @_;
@@ -72,14 +72,15 @@ sub mix {
 # luma is the weighted sum of gamma-compressed R′G′B′ components
 # relative luminance is the weighted sum of linear RGB components
 
-# HDTV
+# ITU BT.709 --- HDTV
 sub linear_luminance_709 {
     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
     my ($r, $g, $b) = map { clamp($_) } @_;
     return 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
+    # 0.212655; 0.715158; 0.072187
 }
 
-# SDTV
+# ITU BT.601 --- SDTV
 sub linear_luminance_601 {
     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
     my ($r, $g, $b) = map { clamp($_) } @_;
@@ -130,6 +131,8 @@ sub linear_hue {
 sub linear_saturation_hsv {
     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
     my ($r, $g, $b) = map { clamp($_) } @_;
+
+    # eh?
 }
 
 sub linear_saturation_hsl {
@@ -173,6 +176,33 @@ sub linear_brightness {
 sub linear_chrominance {
     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
     my ($r, $g, $b) = map { clamp($_) } @_;
+    # eh?
+}
+
+# https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color
+sub luminance_to_lightness {
+    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
+    my ($y) = map { clamp($_) } @_;
+
+    if ($y <= 0.00856) {        # 216/24389
+        return $y * 903.3;      # 24389/27
+    } else {
+        return $y ** (1/3) * 116 - 16;
+    }
+    # L* = 50 when Y = 18.4 or 18% gray card
+}
+
+sub contrast_ratio {
+    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
+    my ($r1, $g1, $b1, $r2, $g2, $b2) = map { clamp($_) } @_;
+    my $y1 = linear_luminance_srgb($r1, $g1, $b1);
+    my $y2 = linear_luminance_srgb($r2, $g2, $b2);
+    if ($y1 < $y2) {
+        ($y1, $y2) = ($y2, $y1);
+    }
+    return ($y1 + 0.05) / ($y2 + 0.05);
+    # 1 = no contrast
+    # 21 = max contrast
 }
 
 sub near_equal {
