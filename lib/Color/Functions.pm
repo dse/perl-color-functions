@@ -23,6 +23,7 @@ our @EXPORT_OK = (
     'linear_saturation_hsv',
     'linear_saturation_hsl',
     'linear_lightness_hsl',
+    'linear_contrast_ratio',
 );
 our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
@@ -241,18 +242,18 @@ sub linear_lightness_hsl {
 #     # L* = 50 when Y = 18.4 or 18% gray card
 # }
 
-# sub linear_contrast_ratio {
-#     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-#     my ($r1, $g1, $b1, $r2, $g2, $b2) = map { clamp($_) } @_;
-#     my $y1 = linear_luminance_srgb($r1, $g1, $b1);
-#     my $y2 = linear_luminance_srgb($r2, $g2, $b2);
-#     if ($y1 < $y2) {
-#         ($y1, $y2) = ($y2, $y1);
-#     }
-#     return ($y1 + 0.05) / ($y2 + 0.05);
-#     # 1 = no contrast
-#     # 21 = max contrast
-# }
+sub linear_contrast_ratio {
+    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
+    my ($r1, $g1, $b1, $r2, $g2, $b2) = map { clamp($_) } @_;
+    my $y1 = linear_luminance_srgb($r1, $g1, $b1);
+    my $y2 = linear_luminance_srgb($r2, $g2, $b2);
+    if ($y1 < $y2) {
+        ($y1, $y2) = ($y2, $y1);
+    }
+    return ($y1 + 0.05) / ($y2 + 0.05);
+    # 1 = no contrast
+    # 21 = max contrast
+}
 
 sub near_equal {
     my ($a, $b) = @_;
