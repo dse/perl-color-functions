@@ -21,6 +21,12 @@ our @EXPORT_OK = (
     'color_mix',
     'multiply_255',
     'divide_255',
+    'srgb_to_hsl',              # convenience
+    'srgb_to_hsv',
+    'srgb_to_hsi',
+    'hsl_to_srgb',
+    'hsv_to_srgb',
+    'hsi_to_srgb',
 );
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
@@ -257,6 +263,31 @@ sub clamp {
     $min //= '-Inf' + 0;
     $max //= 'Inf' + 0;
     return $x < $min ? $min : $x > $max ? $max : $x;
+}
+
+sub hsl_to_srgb {
+    my ($h, $s, $l) = shift3 @_;
+    return linear_to_srgb(hsl_to_linear($h, $s, $l));
+}
+sub hsv_to_srgb {
+    my ($h, $s, $v) = shift3 @_;
+    return linear_to_srgb(hsv_to_linear($h, $s, $v));
+}
+sub hsi_to_srgb {
+    my ($h, $s, $i) = shift3 @_;
+    return linear_to_srgb(hsi_to_linear($h, $s, $i));
+}
+sub srgb_to_hsl {
+    my ($r, $g, $b) = shift3 @_;
+    return linear_to_hsl(srgb_to_linear($r, $g, $b));
+}
+sub srgb_to_hsv {
+    my ($r, $g, $b) = shift3 @_;
+    return linear_to_hsv(srgb_to_linear($r, $g, $b));
+}
+sub srgb_to_hsi {
+    my ($r, $g, $b) = shift3 @_;
+    return linear_to_hsi(srgb_to_linear($r, $g, $b));
 }
 
 ###############################################################################
