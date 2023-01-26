@@ -18,10 +18,27 @@ our @EXPORT_OK = (
     'hsl_to_linear',
     'hsi_to_linear',
     'linear_luminance',
+    'color_mix',
+    'multiply_255',
+    'divide_255',
 );
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
 sub shift3 (\@);
+
+sub multiply_255 {
+    my ($r, $g, $b) = shift3 @_;
+    my @result = map { round(clamp($_) * 255) } ($r, $g, $b);
+    return @result if wantarray;
+    return \@result;
+}
+
+sub divide_255 {
+    my ($r, $g, $b) = shift3 @_;
+    my @result = map { clamp($_, 0, 255) / 255 } ($r, $g, $b);
+    return @result if wantarray;
+    return \@result;
+}
 
 # https://en.wikipedia.org/wiki/SRGB
 sub srgb_to_linear {
@@ -219,6 +236,27 @@ sub linear_contrast_ratio {
         ($y1, $y2) = ($y2, $y1);
     }
     return ($y1 + 0.05) / ($y2 + 0.05);
+}
+
+sub color_mix {
+    my ($r1, $g1, $b1) = shift3 @_;
+    my ($r2, $g2, $b2) = shift3 @_;
+    my $opacity = shift;
+    my $r = $r1 + ($r2 - $r1) * clamp($opacity);
+    my $g = $g1 + ($g2 - $g1) * clamp($opacity);
+    my $b = $b1 + ($b2 - $b1) * clamp($opacity);
+    return ($r, $g, $b) if wantarray;
+    return [$r, $g, $b];
+}
+
+sub clamp {
+    my ($x, $min, $max) = @_;
+    if (!defined $min && !defined $max) {
+        ($min, $max) = (0, 1);
+    }
+    $min //= '-Inf' + 0;
+    $max //= 'Inf' + 0;
+    return $x < $min ? $min : $x > $max ? $max : $x;
 }
 
 ###############################################################################
