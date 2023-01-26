@@ -2,262 +2,239 @@ package Color::Functions;
 use warnings;
 use strict;
 use List::Util qw(min max);
+use POSIX qw(round fmod);
+use Math::Trig qw(pi2);
 
 use base "Exporter";
 
 our @EXPORT = qw();
 our @EXPORT_OK = (
-    'clamp',
     'srgb_to_linear',
     'linear_to_srgb',
-    'linear_color_mix',
-    'linear_luminance_srgb',
-    'linear_luminance_709',
-    'linear_luminance_601',
-    'linear_luminance_2020',
-    'linear_luminance_240',
-    'linear_hsv',
-    'linear_hsl',
-    'linear_hue_hsv_hsl',
-    'linear_value_hsv',
-    'linear_saturation_hsv',
-    'linear_saturation_hsl',
-    'linear_lightness_hsl',
-    'linear_contrast_ratio',
+    'linear_to_hsv',
+    'linear_to_hsl',
+    'linear_to_hsi',
+    'hsv_to_linear',
+    'hsl_to_linear',
+    'hsi_to_linear',
+    'linear_luminance',
 );
-our %EXPORT_TAGS = (
-    all => \@EXPORT_OK,
-);
+our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
-our $GAMMA_2020    = 2.2;
-our $ALPHA_2020    = 1.099;           # 1.099296826809442
-our $A_2020        = $ALPHA_2020 - 1; # 0.099
-our $BETA_2020     = 0.018;           # 0.018053968510807
-our $THINGY_2020   = 4.5;
-our $THINGY_2_2020 = $THINGY_2020 * $BETA_2020; # 0.081...
+sub shift3 (\@);
 
-our $GAMMA_709     = 2.2;
-our $ALPHA_709     = 1.099;
-our $A_709         = $ALPHA_709 - 1; # 0.099
-our $BETA_709      = 0.018;
-our $THINGY_709    = 4.5;
-our $THINGY_2_709  = $THINGY_709 * $BETA_709; # 0.081
-
-our $GAMMA_SRGB    = 2.4;
-our $ALPHA_SRGB    = 1.055;
-our $A_SRGB        = $ALPHA_SRGB - 1; # 0.055
-our $BETA_SRGB     = 0.0031308;
-our $THINGY_SRGB   = 12.92;     # orig 12.9232102
-our $THINGY_2_SRGB = $THINGY_SRGB * $BETA_SRGB; # 0.04045 orig 0.0392857 from obsolete early draft
-
-sub clamp {
-    my ($x, $min, $max) = @_;
-    if (!defined $min && !defined $max) {
-        ($min, $max) = (0, 1);
-    } else {
-        $min //= (0 + "-Inf");
-        $max //= (0 + "Inf");
-    }
-    return $min if $x < $min;
-    return $max if $x > $max;
-    return $x;
-}
-
+# https://en.wikipedia.org/wiki/SRGB
 sub srgb_to_linear {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    ($r, $g, $b) = map {
-        ($_ <= $THINGY_2_SRGB) ? ($_ / $THINGY_SRGB) : ((($_ + $A_SRGB) ** $GAMMA_SRGB) / $ALPHA_SRGB)
-    } ($r, $g, $b);
-    return ($r, $g, $b) if wantarray;
-    return [$r, $g, $b];
+    my ($r, $g, $b) = shift3 @_;
+    my $linear_r = ($r <= 0.04045) ? ($r / 12.92) : ((($r + 0.055) / 1.055) ** 2.4);
+    my $linear_g = ($g <= 0.04045) ? ($g / 12.92) : ((($g + 0.055) / 1.055) ** 2.4);
+    my $linear_b = ($b <= 0.04045) ? ($b / 12.92) : ((($b + 0.055) / 1.055) ** 2.4);
+    my @result = ($linear_r, $linear_g, $linear_b);
+    return @result if wantarray;
+    return \@result;
 }
 
+# https://en.wikipedia.org/wiki/SRGB
 sub linear_to_srgb {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    ($r, $g, $b) = map {
-        ($_ <= $BETA_SRGB) ? ($THINGY_SRGB * $_) : ($ALPHA_SRGB * ($_ ** (1 / $GAMMA_SRGB)) - $A_SRGB)
-    } ($r, $g, $b);
+    my ($r, $g, $b) = shift3 @_;
+    my $srgb_r = ($r <= 0.0031308) ? ($r * 12.92) : (1.055 * ($r ** (1 / 2.4)) - 0.055);
+    my $srgb_g = ($g <= 0.0031308) ? ($g * 12.92) : (1.055 * ($g ** (1 / 2.4)) - 0.055);
+    my $srgb_b = ($b <= 0.0031308) ? ($b * 12.92) : (1.055 * ($b ** (1 / 2.4)) - 0.055);
+    my @result = ($srgb_r, $srgb_g, $srgb_b);
+    return @result if wantarray;
+    return \@result;
+}
+
+# https://en.wikipedia.org/wiki/HSL_and_HSV
+sub linear_to_hsv {
+    my ($r, $g, $b) = shift3 @_;
+    my $max = max($r, $g, $b);
+    my $min = min($r, $g, $b);
+    my $c = $max - $min;
+    my $v = $max;
+    my $h = linear_hue($r, $g, $b);
+    my $s = near_equal($v, 0) ? 0 : ($c / $v);
+    return ($h, $s, $v) if wantarray;
+    return [$h, $s, $v];
+}
+
+# https://en.wikipedia.org/wiki/HSL_and_HSV
+sub linear_to_hsl {
+    my ($r, $g, $b) = shift3 @_;
+    my $max = max($r, $g, $b);
+    my $min = min($r, $g, $b);
+    my $c = $max - $min;
+    my $h = linear_hue($r, $g, $b);
+    my $l = ($max + $min) / 2;
+    my $s = (near_equal($l, 0) || near_equal($l, 1)) ? 0 : ($c / (1 - abs(2 * $l - 1)));
+    return ($h, $s, $l) if wantarray;
+    return [$h, $s, $l];
+}
+
+# https://en.wikipedia.org/wiki/HSL_and_HSV
+sub linear_to_hsi {
+    my ($r, $g, $b) = shift3 @_;
+    my $max = max($r, $g, $b);
+    my $min = min($r, $g, $b);
+    my $c = $max - $min;
+    my $h = linear_hue($r, $g, $b);
+    my $i = ($r + $g + $b) / 3; # intensity (HSI)
+    my $s = near_equal($i, 0) ? 0 : (1 - $min / $i);
+    return ($h, $s, $i) if wantarray;
+    return [$h, $s, $i];
+}
+
+# https://en.wikipedia.org/wiki/HSL_and_HSV
+sub linear_hue {
+    my ($r, $g, $b) = shift3 @_;
+    my $max = max($r, $g, $b);
+    my $min = min($r, $g, $b);
+    my $c = $max - $min;
+    my $h = near_equal($c, 0) ? 0 :
+      ($max == $r) ? (($g - $b) / $c) :
+      ($max == $g) ? (($b - $r) / $c + 2) :
+      ($max == $b) ? (($r - $g) / $c + 4) : 0;
+    $h /= 6;
+    if ($h < 0) { $h += 1; }
+    return $h;
+}
+
+# https://vocal.com/video/rgb-and-hsvhsihsl-color-space-conversion/
+sub hsv_to_linear {
+    my ($h, $s, $v) = shift3 @_;
+    while ($h < 0) { $h += 1; }
+    while ($h >= 1) { $h -= 1; }
+    my $c = $v * $s;
+    my $x = $c * (1 - abs(fmod($h * 6, 2) - 1));
+    my ($r, $g, $b) = h_to_rgb_helper($h, $c, $x);
+    my $m = $v - $c;
+    $r += $m;
+    $g += $m;
+    $b += $m;
     return ($r, $g, $b) if wantarray;
     return [$r, $g, $b];
 }
 
-sub mix {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_; # [r,g,b],[r,g,b],amount => r,g,b,r,g,b,amount
-    my ($r1, $g1, $b1, $r2, $g2, $b2, $amount) = @_;
-    ($r1, $g1, $b1, $r2, $g2, $b2) = map { clamp($_) } ($r1, $g1, $b1, $r2, $g2, $b2);
-    my $r = clamp($r1 + ($r2 - $r1) * $amount);
-    my $g = clamp($g1 + ($g2 - $g1) * $amount);
-    my $b = clamp($b1 + ($b2 - $b1) * $amount);
+# https://vocal.com/video/rgb-and-hsvhsihsl-color-space-conversion/
+sub hsl_to_linear {
+    my ($h, $s, $l) = shift3 @_;
+    while ($h < 0) { $h += 1; }
+    while ($h >= 1) { $h -= 1; }
+    my $c = (1 - abs(2 * $l - 1)) * $s;
+    my $h6 = $h * 6;
+    my $x = $c * (1 - abs(fmod($h6, 2) - 1));
+    my ($r, $g, $b) = h_to_rgb_helper($h, $c, $x);
+    my $m = $l - $c / 2;
+    $r += $m;
+    $g += $m;
+    $b += $m;
+    return ($r, $g, $b) if wantarray;
+    return [$r, $g, $b];
+}
+
+# https://vocal.com/video/rgb-and-hsvhsihsl-color-space-conversion/
+sub hsi_to_linear {
+    my ($h, $s, $i) = shift3 @_;
+    while ($h < 0) { $h += 1; }
+    while ($h >= 1) { $h -= 1; }
+    my $rad_h = $h * pi2;       # [0, 1] => [0, 2pi]
+    my $rad_60  = pi2 * 1/6;    # pi/3
+    my $rad_120 = pi2 * 2/6;    # 2pi/3
+    my $rad_180 = pi2 * 3/6;    # pi
+    my $rad_240 = pi2 * 4/6;    # 4pi/3
+    my $rad_300 = pi2 * 5/6;    # 5pi/3
+    my $rad_360 = pi2 * 6/6;    # 2pi
+    my $h3 = $h * 3;
+    my ($r, $g, $b);
+    if ($h3 <= 1) {
+        $b = $i * (1 - $s);
+        $r = $i * (1 + ($s * cos($rad_h) / cos($rad_60 - $rad_h)));
+        $g = 3 * $i - $b - $r;
+    } elsif ($h3 <= 2) {
+        $r = $i * (1 - $s);
+        $g = $i * (1 + ($s * cos($rad_h - $rad_120) / cos($rad_180 - $rad_h)));
+        $b = 3 * $i - $r - $g;
+    } elsif ($h3 <= 3) {
+        $g = $i * (1 - $s);
+        $b = $i * (1 + ($s * cos($rad_h - $rad_240) / cos($rad_300 - $rad_h)));
+        $r = 3 * $i - $b - $g;
+    }
+    return ($r, $g, $b) if wantarray;
+    return [$r, $g, $b];
+}
+
+sub h_to_rgb_helper {
+    my ($h, $c, $x) = @_;
+    my $h6 = $h * 6;
+    my ($r, $g, $b);
+    if ($h6 <= 1) {
+        ($r, $g, $b) = ($c, $x, 0);
+    } elsif ($h6 <= 2) {
+        ($r, $g, $b) = ($x, $c, 0);
+    } elsif ($h6 <= 3) {
+        ($r, $g, $b) = (0, $c, $x);
+    } elsif ($h6 <= 4) {
+        ($r, $g, $b) = (0, $x, $c);
+    } elsif ($h6 <= 5) {
+        ($r, $g, $b) = ($x, 0, $c);
+    } elsif ($h6 <= 6) {
+        ($r, $g, $b) = ($c, 0, $x);
+    }
     return ($r, $g, $b) if wantarray;
     return [$r, $g, $b];
 }
 
 # https://en.wikipedia.org/wiki/Luma_(video)
-# luma is the weighted sum of gamma-compressed R′G′B′ components
-# relative luminance is the weighted sum of linear RGB components
-
-# ITU BT.709 --- HDTV
-
-sub linear_luminance_srgb {
-    goto &linear_luminance_709;
-}
-
-sub linear_luminance_709 {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
+#
+# The linear_luminance function calculates LUMINANCE when used with
+# linear R, G, B values.
+#
+# The srgb_luma function calculates LUMA from gamma-corrected R, G, B
+# values.
+#
+# Both are calculated the same way, though srgb_luma is probably not
+# used that often.
+sub linear_luminance {
+    my ($r, $g, $b) = shift3 @_;
     return 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
-    # 0.212655; 0.715158; 0.072187
+}
+sub srgb_luma {
+    goto &linear_luminance;
 }
 
-# ITU BT.601 --- SDTV
-sub linear_luminance_601 {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    return 0.299 * $r + 0.587 * $g + 0.114 * $b;
+sub near_equal {
+    my ($a, $b) = @_;
+    return abs($a - $b) < 0.00000000000001;
 }
 
-# UHDTV, HDR
-sub linear_luminance_2020 {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    return 0.2627 * $r + 0.6780 * $g + 0.0593 * $b;
-}
-
-# Adobe?
-# SMPTE RP 145 primaries
-# SMPTE C
-sub linear_luminance_240 {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    return 0.212 * $r + 0.701 * $g + 0.087 * $b;
-}
-
-sub linear_hsv {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    my $h = linear_hue_hsv_hsl($r, $g, $b);
-    my $s = linear_saturation_hsv($r, $g, $b);
-    my $v = linear_value_hsv($r, $g, $b);
-    return ($h, $s, $v) if wantarray;
-    return [$h, $s, $v];
-}
-
-sub linear_hsl {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    my $h = linear_hue_hsv_hsl($r, $g, $b);
-    my $s = linear_saturation_hsl($r, $g, $b);
-    my $l = linear_lightness_hsl($r, $g, $b);
-    return ($h, $s, $l) if wantarray;
-    return [$h, $s, $l];
-}
-
-# HSV and HSL
-sub linear_hue_hsv_hsl {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-
-    my $max = max($r, $g, $b);
-    my $min = min($r, $g, $b);
-    my $c = $max - $min;        # range
-    my $h;
-    if (near_equal($c, 0)) {
-        return 0;               # meaningless
-    }
-    if ($max == $r) {
-        if ($g - $b < 0) {
-            $h = ($g - $b) / $c + 6;
-        } else {
-            $h = ($g - $b) / $c;
-        }
-    } elsif ($max == $g) {
-        $h = ($b - $r) / $c + 2;
-    } elsif ($max == $b) {
-        $h = ($r - $g) / $c + 4;
-    }
-    return $h / 6;
-}
-
-sub linear_saturation_hsv {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-
-    my $max = max($r, $g, $b);
-    my $min = min($r, $g, $b);
-    my $c = $max - $min;
-    if (near_equal($max, 0)) {
-        return 0;
-    }
-    return $c / $max;
-}
-
-sub linear_saturation_hsl {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-
-    my $max = max($r, $g, $b);
-    my $min = min($r, $g, $b);
-    my $c = $max - $min;        # range
-    my $l = ($max + $min) / 2;
-    if (near_equal($c, 0)) {
-        return 0;               # meaningless
-    }
-    return $c / (1 - abs(2 * $l - 1));
-}
-
-sub linear_brightness_hsv {
-    goto &linear_value_hsv;
-}
-
-sub linear_value_hsv {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    return max($r, $g, $b);
-}
-
-sub linear_lightness_hsl {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r, $g, $b) = map { clamp($_) } @_;
-    return ($r + $g + $b) / 3;
-}
-
-# sub linear_chrominance {
-#     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-#     my ($r, $g, $b) = map { clamp($_) } @_;
-#     # eh?
-# }
-
-# https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color
-# sub linear_luminance_to_lightness {
-#     @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-#     my ($y) = map { clamp($_) } @_;
-
-#     if ($y <= 0.00856) {        # 216/24389
-#         return $y * 903.3;      # 24389/27
-#     } else {
-#         return $y ** (1/3) * 116 - 16;
-#     }
-#     # L* = 50 when Y = 18.4 or 18% gray card
-# }
-
+# https://www.accessibility-developer-guide.com/knowledge/colours-and-contrast/how-to-calculate/
+# 1  = no contrast (1 to 1)
+# 21 = max contrast (21 to 1)
 sub linear_contrast_ratio {
-    @_ = map { (ref $_ eq 'ARRAY') ? @$_ : ($_) } @_;
-    my ($r1, $g1, $b1, $r2, $g2, $b2) = map { clamp($_) } @_;
+    my ($r1, $g1, $b1) = shift3 @_;
+    my ($r2, $g2, $b2) = shift3 @_;
     my $y1 = linear_luminance_srgb($r1, $g1, $b1);
     my $y2 = linear_luminance_srgb($r2, $g2, $b2);
     if ($y1 < $y2) {
         ($y1, $y2) = ($y2, $y1);
     }
     return ($y1 + 0.05) / ($y2 + 0.05);
-    # 1 = no contrast
-    # 21 = max contrast
 }
 
-sub near_equal {
-    my ($a, $b) = @_;
-    return abs($a - $b) < 0.00000000000001;
+###############################################################################
+sub shift3 (\@) {
+    my ($array) = @_;
+    my $a = shift @$array;
+    my @result;
+    if (ref $a eq 'ARRAY') {
+        @result = @$a[0, 1, 2];
+    } else {
+        my $b = shift @$array;
+        my $c = shift @$array;
+        @result = ($a, $b, $c);
+    }
+    return @result if wantarray;
+    return \@result;
 }
 
 1;
