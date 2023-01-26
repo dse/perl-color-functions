@@ -18,7 +18,8 @@ our @EXPORT_OK = (
     'hsl_to_linear',
     'hsi_to_linear',
     'linear_luminance',
-    'color_mix',
+    'linear_color_mix',
+    'srgb_color_mix',
     'multiply_255',
     'divide_255',
     'srgb_to_hsl',              # convenience
@@ -27,6 +28,14 @@ our @EXPORT_OK = (
     'hsl_to_srgb',
     'hsv_to_srgb',
     'hsi_to_srgb',
+    'srgb255_to_hsl',           # even more convenience
+    'srgb255_to_hsv',
+    'srgb255_to_hsi',
+    'hsl_to_srgb255',
+    'hsv_to_srgb255',
+    'hsi_to_srgb255',
+    'srgb255_hex',
+    'srgb_hex',
 );
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
@@ -34,7 +43,7 @@ sub shift3 (\@);
 
 sub multiply_255 {
     my ($r, $g, $b) = shift3 @_;
-    my @result = map { round(clamp($_) * 255) } ($r, $g, $b);
+    my @result = map { clamp($_) * 255 } ($r, $g, $b);
     return @result if wantarray;
     return \@result;
 }
@@ -244,13 +253,25 @@ sub linear_contrast_ratio {
     return ($y1 + 0.05) / ($y2 + 0.05);
 }
 
-sub color_mix {
+sub linear_color_mix {
     my ($r1, $g1, $b1) = shift3 @_;
     my ($r2, $g2, $b2) = shift3 @_;
     my $opacity = shift;
     my $r = $r1 + ($r2 - $r1) * clamp($opacity);
     my $g = $g1 + ($g2 - $g1) * clamp($opacity);
     my $b = $b1 + ($b2 - $b1) * clamp($opacity);
+    return ($r, $g, $b) if wantarray;
+    return [$r, $g, $b];
+}
+
+sub srgb_color_mix {
+    my ($r1, $g1, $b1) = shift3 @_;
+    my ($r2, $g2, $b2) = shift3 @_;
+    my $opacity = shift;
+    ($r1, $g1, $b1) = srgb_to_linear($r1, $g1, $b1);
+    ($r2, $g2, $b2) = srgb_to_linear($r2, $g2, $b2);
+    my ($r, $g, $b) = linear_color_mix($r1, $g1, $b1, $r2, $g2, $b2, $opacity);
+    ($r, $g, $b) = linear_to_srgb($r, $g, $b);
     return ($r, $g, $b) if wantarray;
     return [$r, $g, $b];
 }
@@ -265,29 +286,30 @@ sub clamp {
     return $x < $min ? $min : $x > $max ? $max : $x;
 }
 
-sub hsl_to_srgb {
-    my ($h, $s, $l) = shift3 @_;
-    return linear_to_srgb(hsl_to_linear($h, $s, $l));
-}
-sub hsv_to_srgb {
-    my ($h, $s, $v) = shift3 @_;
-    return linear_to_srgb(hsv_to_linear($h, $s, $v));
-}
-sub hsi_to_srgb {
-    my ($h, $s, $i) = shift3 @_;
-    return linear_to_srgb(hsi_to_linear($h, $s, $i));
-}
-sub srgb_to_hsl {
+sub hsl_to_srgb    { my ($h, $s, $l) = shift3 @_; return linear_to_srgb(hsl_to_linear($h, $s, $l)); }
+sub hsv_to_srgb    { my ($h, $s, $v) = shift3 @_; return linear_to_srgb(hsv_to_linear($h, $s, $v)); }
+sub hsi_to_srgb    { my ($h, $s, $i) = shift3 @_; return linear_to_srgb(hsi_to_linear($h, $s, $i)); }
+sub srgb_to_hsl    { my ($r, $g, $b) = shift3 @_; return linear_to_hsl(srgb_to_linear($r, $g, $b)); }
+sub srgb_to_hsv    { my ($r, $g, $b) = shift3 @_; return linear_to_hsv(srgb_to_linear($r, $g, $b)); }
+sub srgb_to_hsi    { my ($r, $g, $b) = shift3 @_; return linear_to_hsi(srgb_to_linear($r, $g, $b)); }
+sub srgb255_to_hsl { my ($r, $g, $b) = shift3 @_; return srgb_to_hsl(divide_255($r, $g, $b)); }
+sub srgb255_to_hsv { my ($r, $g, $b) = shift3 @_; return srgb_to_hsv(divide_255($r, $g, $b)); }
+sub srgb255_to_hsi { my ($r, $g, $b) = shift3 @_; return srgb_to_hsi(divide_255($r, $g, $b)); }
+sub hsl_to_srgb255 { my ($h, $s, $l) = shift3 @_; return multiply_255(hsl_to_srgb($h, $s, $l)); }
+sub hsv_to_srgb255 { my ($h, $s, $v) = shift3 @_; return multiply_255(hsv_to_srgb($h, $s, $v)); }
+sub hsi_to_srgb255 { my ($h, $s, $i) = shift3 @_; return multiply_255(hsi_to_srgb($h, $s, $i)); }
+
+sub raw_hex {
     my ($r, $g, $b) = shift3 @_;
-    return linear_to_hsl(srgb_to_linear($r, $g, $b));
+    return sprintf('#%02x%02x%02x', map { round($_) } $r, $g, $b);
 }
-sub srgb_to_hsv {
+sub srgb255_hex {
     my ($r, $g, $b) = shift3 @_;
-    return linear_to_hsv(srgb_to_linear($r, $g, $b));
+    return sprintf('#%02x%02x%02x', map { round($_) } $r, $g, $b);
 }
-sub srgb_to_hsi {
+sub srgb_hex {
     my ($r, $g, $b) = shift3 @_;
-    return linear_to_hsi(srgb_to_linear($r, $g, $b));
+    return sprintf('#%02x%02x%02x', map { round($_) } @{multiply_255($r, $g, $b)});
 }
 
 ###############################################################################
