@@ -5,6 +5,14 @@ use List::Util qw(min max);
 use POSIX qw(round fmod);
 use Math::Trig qw(pi2);
 
+=pod
+
+=head1 NAME
+
+Color::Functions - functions for converting between color spaces, etc.
+
+=cut
+
 use base "Exporter";
 
 our @EXPORT = qw();
@@ -41,6 +49,14 @@ our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
 sub shift3 (\@);
 
+=over 4
+
+=item multiply_255
+
+converts values in the range of [0, 1] to [0, 255].
+
+=cut
+
 sub multiply_255 {
     my ($r, $g, $b) = shift3 @_;
     my @result = map { clamp($_) * 255 } ($r, $g, $b);
@@ -48,12 +64,25 @@ sub multiply_255 {
     return \@result;
 }
 
+=item divide_255
+
+converts values in the range of [0, 255] to [0, 1].
+
+=cut
+
 sub divide_255 {
     my ($r, $g, $b) = shift3 @_;
     my @result = map { clamp($_, 0, 255) / 255 } ($r, $g, $b);
     return @result if wantarray;
     return \@result;
 }
+
+=item srgb_to_linear
+
+Converts gamma-corrected sRGB color values in the range of [0, 1] to
+linear RGB color values in the range [0, 1].
+
+=cut
 
 # https://en.wikipedia.org/wiki/SRGB
 sub srgb_to_linear {
@@ -66,6 +95,14 @@ sub srgb_to_linear {
     return \@result;
 }
 
+=item srgb_to_linear,
+
+Converts linear RGB color values in the range of [0, 1] to
+gamma-corrected sRGB color values in the range of [0, 1].  Arguments
+and return values are in the range [0, 1].
+
+=cut
+
 # https://en.wikipedia.org/wiki/SRGB
 sub linear_to_srgb {
     my ($r, $g, $b) = shift3 @_;
@@ -76,6 +113,18 @@ sub linear_to_srgb {
     return @result if wantarray;
     return \@result;
 }
+
+=item linear_to_hsv, linear_to_hsl, linear_to_hsi
+
+Converts linear RGB color space values in [0, 1] to HSV, HSL, or HSI
+color space values in [0, 1].
+
+=item linear_to_hsv, linear_to_hsl, linear_to_hsi
+
+Converts HSV, HSL, or HSI color space values in [0, 1] to linear RGB
+color space values in [0, 1].
+
+=cut
 
 # https://en.wikipedia.org/wiki/HSL_and_HSV
 sub linear_to_hsv {
@@ -226,6 +275,22 @@ sub h_to_rgb_helper {
 #
 # Both are calculated the same way, though srgb_luma is probably not
 # used that often.
+
+=item linear_luminance, srgb_luma
+
+linear_luminance takes the specified linear RGB color component values
+in [0, 1] and returns the color's luminance value in [0, 1].
+
+srgb_luma takes the specified gamma-compressed sRGB color component
+values in [0, 1] and returns the color's luma value in [0, 1].
+
+The linear_luminance and srgb_luma functions are, in fact, the same
+function.  Linear luminance reflects the actual brightness of a color
+(specified as linear RGB), while luma is used in video signaling for
+something called "chroma subsampling".
+
+=cut
+
 sub linear_luminance {
     my ($r, $g, $b) = shift3 @_;
     return 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
@@ -238,6 +303,15 @@ sub near_equal {
     my ($a, $b) = @_;
     return abs($a - $b) < 0.00000000000001;
 }
+
+=head1 linear_contrast_ratio
+
+Accepts two colors, each specified as three linear RGB component
+values in [0, 1], and returns the contrast ratio between them in the
+range [1, 21].  1 means no contrast and 21 means the highest possible
+contrast.
+
+=cut
 
 # https://www.accessibility-developer-guide.com/knowledge/colours-and-contrast/how-to-calculate/
 # 1  = no contrast (1 to 1)
@@ -253,6 +327,17 @@ sub linear_contrast_ratio {
     return ($y1 + 0.05) / ($y2 + 0.05);
 }
 
+=head1 linear_color_mix
+
+Accepts two colors, each specified as three linear RGB component
+values in [0, 1], and an opacity in [0, 1].  Returns the result of
+mixing the first color with a proportion of the second color
+represented by the opacity, as linear RGB component values in [0, 1].
+opacity = 0 results in the first color; opacity = 1 results in the
+second color.
+
+=cut
+
 sub linear_color_mix {
     my ($r1, $g1, $b1) = shift3 @_;
     my ($r2, $g2, $b2) = shift3 @_;
@@ -263,6 +348,14 @@ sub linear_color_mix {
     return ($r, $g, $b) if wantarray;
     return [$r, $g, $b];
 }
+
+=head1 srgb_color_mix
+
+Does the same color mixing as the linear_color_mix function.  Accepts
+gamma-corrected sRGB color values in [0, 1], converts them to linear,
+does the mixing, and returns gamma-corrected sRGB values in [0, 1].
+
+=cut
 
 sub srgb_color_mix {
     my ($r1, $g1, $b1) = shift3 @_;
