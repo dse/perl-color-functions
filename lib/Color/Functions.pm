@@ -22,9 +22,11 @@ our @EXPORT_OK = (
     'linear_to_hsv',
     'linear_to_hsl',
     'linear_to_hsi',
+    'linear_to_hsp',
     'hsv_to_linear',
     'hsl_to_linear',
     'hsi_to_linear',
+    'hsp_to_linear',
     'linear_luminance',
     'linear_color_mix',
     'srgb_color_mix',
@@ -33,15 +35,19 @@ our @EXPORT_OK = (
     'srgb_to_hsl',              # convenience
     'srgb_to_hsv',
     'srgb_to_hsi',
+    'srgb_to_hsp',
     'hsl_to_srgb',
     'hsv_to_srgb',
     'hsi_to_srgb',
+    'hsp_to_srgb',
     'srgb255_to_hsl',           # even more convenience
     'srgb255_to_hsv',
     'srgb255_to_hsi',
+    'srgb255_to_hsp',
     'hsl_to_srgb255',
     'hsv_to_srgb255',
     'hsi_to_srgb255',
+    'hsp_to_srgb255',
     'srgb255_hex',
     'srgb_hex',
 );
@@ -165,6 +171,43 @@ sub linear_to_hsi {
     return [$h, $s, $i];
 }
 
+# https://alienryderflex.com/hsp.html
+sub linear_to_hsp {
+    my ($r, $g, $b) = shift3 @_;
+    my $p = linear_luminance($r, $g, $b);
+    if ($r == $g && $r == $b) {
+        return [0, 0, $p];
+    }
+    my $h;
+    my $s;
+    if ($r >= $g && $r >= $b) {
+        if ($b >= $g) {
+            $h = 6/6 - 1/6 * ($b - $g) / ($r - $g);
+            $s = 1 - $g / $r;
+        } else {
+            $h = 0/6 + 1/6 * ($g - $b) / ($r - $b);
+            $s = 1 - $b / $r;
+        }
+    } elsif ($g >= $r && $g >= $b) {
+        if ($r >= $b) {
+            $h = 2/6 - 1/6 * ($r - $b) / ($g - $b);
+            $s = 1 - $b / $g;
+        } else {
+            $h = 2/6 + 1/6 * ($b - $r) / ($g - $r);
+            $s = 1 - $r / $g;
+        }
+    } else {
+        if ($g >= $r) {
+            $h = 4/6 - 1/6 * ($g - $r) / ($b - $r);
+            $s = 1 - $r / $b;
+        } else {
+            $h = 4/6 + 1/6 * ($r - $g) / ($b - $g);
+            $s = 1 - $g / $b;
+        }
+    }
+    return [$h, $s, $p];
+}
+
 # https://en.wikipedia.org/wiki/HSL_and_HSV
 sub linear_hue {
     my ($r, $g, $b) = shift3 @_;
@@ -260,6 +303,67 @@ sub h_to_rgb_helper {
         ($r, $g, $b) = ($x, 0, $c);
     } elsif ($h6 <= 6) {
         ($r, $g, $b) = ($c, 0, $x);
+    }
+    return ($r, $g, $b) if wantarray;
+    return [$r, $g, $b];
+}
+
+our $Pr;
+our $Pg;
+our $Pb;
+BEGIN {
+    $Pr = 0.2126;
+    $Pg = 0.7152;
+    $Pb = 0.0722;
+}
+
+# https://alienryderflex.com/hsp.html
+sub hsp_to_linear {
+    my ($h, $s, $p) = shift3 @_;
+    my ($r, $g, $b);
+    my $minOverMax = 1 - $s;
+    my $part;
+    if ($minOverMax>0) {
+        if ( $h<1/6) {   #  R>G>B
+            $h = 6*( $h-0/6); $part=1+$h*(1/$minOverMax-1);
+            $b=$p/sqrt($Pr/$minOverMax/$minOverMax+$Pg*$part*$part+$Pb);
+            $r=($b)/$minOverMax; $g=($b)+$h*(($r)-($b));
+        } elsif ( $h<2/6) {   #  G>R>B
+            $h = 6*(-$h+2/6); $part=1+$h*(1/$minOverMax-1);
+            $b=$p/sqrt($Pg/$minOverMax/$minOverMax+$Pr*$part*$part+$Pb);
+            $g=($b)/$minOverMax; $r=($b)+$h*(($g)-($b));
+        } elsif ( $h<3/6) {   #  G>B>R
+            $h = 6*( $h-2/6); $part=1+$h*(1/$minOverMax-1);
+            $r=$p/sqrt($Pg/$minOverMax/$minOverMax+$Pb*$part*$part+$Pr);
+            $g=($r)/$minOverMax; $b=($r)+$h*(($g)-($r));
+        } elsif ( $h<4/6) {   #  B>G>R
+            $h = 6*(-$h+4/6); $part=1+$h*(1/$minOverMax-1);
+            $r=$p/sqrt($Pb/$minOverMax/$minOverMax+$Pg*$part*$part+$Pr);
+            $b=($r)/$minOverMax; $g=($r)+$h*(($b)-($r));
+        } elsif ( $h<5/6) {   #  B>R>G
+            $h = 6*( $h-4/6); $part=1+$h*(1/$minOverMax-1);
+            $g=$p/sqrt($Pb/$minOverMax/$minOverMax+$Pr*$part*$part+$Pg);
+            $b=($g)/$minOverMax; $r=($g)+$h*(($b)-($g));
+        } else {   #  R>B>G
+            $h = 6*(-$h+6/6); $part=1+$h*(1/$minOverMax-1);
+            $g=$p/sqrt($Pr/$minOverMax/$minOverMax+$Pb*$part*$part+$Pg);
+            $r=($g)/$minOverMax; $b=($g)+$h*(($r)-($g));
+        }
+    }
+    else {
+        if ( $h<1/6) {   #  R>G>B
+            $h = 6*( $h-0/6); $r=sqrt($p*$p/($Pr+$Pg*$h*$h)); $g=($r)*$h; $b=0;
+        } elsif ( $h<2/6) {   #  G>R>B
+            $h = 6*(-$h+2/6); $g=sqrt($p*$p/($Pg+$Pr*$h*$h)); $r=($g)*$h; $b=0;
+        } elsif ( $h<3/6) {   #  G>B>R
+            $h = 6*( $h-2/6); $g=sqrt($p*$p/($Pg+$Pb*$h*$h)); $b=($g)*$h; $r=0;
+        } elsif ( $h<4/6) {   #  B>G>R
+            $h = 6*(-$h+4/6); $b=sqrt($p*$p/($Pb+$Pg*$h*$h)); $g=($b)*$h; $r=0;
+        } elsif ( $h<5/6) {   #  B>R>G
+            $h = 6*( $h-4/6); $b=sqrt($p*$p/($Pb+$Pr*$h*$h)); $r=($b)*$h; $g=0;
+        } else {   #  R>B>G
+            $h = 6*(-$h+6/6); $r=sqrt($p*$p/($Pr+$Pb*$h*$h)); $b=($r)*$h; $g=0;
+        }
     }
     return ($r, $g, $b) if wantarray;
     return [$r, $g, $b];
@@ -382,15 +486,19 @@ sub clamp {
 sub hsl_to_srgb    { my ($h, $s, $l) = shift3 @_; return linear_to_srgb(hsl_to_linear($h, $s, $l)); }
 sub hsv_to_srgb    { my ($h, $s, $v) = shift3 @_; return linear_to_srgb(hsv_to_linear($h, $s, $v)); }
 sub hsi_to_srgb    { my ($h, $s, $i) = shift3 @_; return linear_to_srgb(hsi_to_linear($h, $s, $i)); }
+sub hsp_to_srgb    { my ($h, $s, $p) = shift3 @_; return linear_to_srgb(hsp_to_linear($h, $s, $p)); }
 sub srgb_to_hsl    { my ($r, $g, $b) = shift3 @_; return linear_to_hsl(srgb_to_linear($r, $g, $b)); }
 sub srgb_to_hsv    { my ($r, $g, $b) = shift3 @_; return linear_to_hsv(srgb_to_linear($r, $g, $b)); }
 sub srgb_to_hsi    { my ($r, $g, $b) = shift3 @_; return linear_to_hsi(srgb_to_linear($r, $g, $b)); }
+sub srgb_to_hsp    { my ($r, $g, $b) = shift3 @_; return linear_to_hsp(srgb_to_linear($r, $g, $b)); }
 sub srgb255_to_hsl { my ($r, $g, $b) = shift3 @_; return srgb_to_hsl(divide_255($r, $g, $b)); }
 sub srgb255_to_hsv { my ($r, $g, $b) = shift3 @_; return srgb_to_hsv(divide_255($r, $g, $b)); }
 sub srgb255_to_hsi { my ($r, $g, $b) = shift3 @_; return srgb_to_hsi(divide_255($r, $g, $b)); }
+sub srgb255_to_hsp { my ($r, $g, $b) = shift3 @_; return srgb_to_hsp(divide_255($r, $g, $b)); }
 sub hsl_to_srgb255 { my ($h, $s, $l) = shift3 @_; return multiply_255(hsl_to_srgb($h, $s, $l)); }
 sub hsv_to_srgb255 { my ($h, $s, $v) = shift3 @_; return multiply_255(hsv_to_srgb($h, $s, $v)); }
 sub hsi_to_srgb255 { my ($h, $s, $i) = shift3 @_; return multiply_255(hsi_to_srgb($h, $s, $i)); }
+sub hsp_to_srgb255 { my ($h, $s, $p) = shift3 @_; return multiply_255(hsp_to_srgb($h, $s, $p)); }
 
 sub raw_hex {
     my ($r, $g, $b) = shift3 @_;
